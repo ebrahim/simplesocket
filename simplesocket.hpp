@@ -27,8 +27,8 @@
 *******************************************************************************
 #endif
 
-#ifndef _MSOCKET_HPP_
-#define _MSOCKET_HPP_
+#ifndef _SIMPLESOCKET_HPP_
+#define _SIMPLESOCKET_HPP_
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -282,4 +282,4 @@ public:
 	}
 };
 
-#endif // _MSOCKET_HPP_
+#endif // _SIMPLESOCKET_HPP_
