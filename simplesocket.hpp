@@ -73,7 +73,7 @@ public:
 	int close()
 	{
 		if (state == SS_ERROR)
-			return -2;
+			return -1;
 		int res = ::close(sd);
 		if (res == 0)
 		{
@@ -93,6 +93,21 @@ public:
 	SocketState getState()
 	{
 		return state;
+	}
+	int setTimeOut(int sec, int usec = 0)
+	{
+		timeval t;
+		t.tv_sec = sec;
+		t.tv_usec = usec;
+		return setSendTimeOut(t) + setReceiveTimeOut(t);
+	}
+	int setSendTimeOut(timeval t)
+	{
+		return setsockopt(sd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t));
+	}
+	int setReceiveTimeOut(timeval t)
+	{
+		return setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
 	}
 
 	static char* getIP(const char* hostname, char* ip)		// Allocation is up to user!
@@ -134,7 +149,7 @@ public:
 	int connect(const char* host, Port port)
 	{
 		if (state != SS_READY)
-			return -2;
+			return -1;
 		
 		sockaddr_in dest;
 		memset(&dest, 0, sizeof(dest));		// Clear struct
@@ -161,7 +176,7 @@ public:
 	int send(const void* data, unsigned int size, int flags = MSG_NOSIGNAL)
 	{
 		if (state != SS_CONNECTED)
-			return -2;
+			return -1;
 		
 		int res = 0;
 		while (size > 0)
@@ -169,7 +184,7 @@ public:
 			int wrote = ::send(sd, data, size, flags);
 			if (wrote < 0)
 			{
-				res = -4;
+				res = -1;
 				break;
 			}
 			data = (const char*) data + wrote;
@@ -191,10 +206,10 @@ public:
 	int receive(void* buf, unsigned int size, int flags = MSG_WAITALL)
 	{
 		if (state != SS_CONNECTED)
-			return -2;
+			return -1;
 		
 		if (recv(sd, buf, size, flags) != size)
-			return -4;
+			return -1;
 		return 0;
 	}
 	int readLine(string& line, unsigned int maxSize = (unsigned int) -1, char delimiter = '\n', char ignore = '\r')
@@ -226,7 +241,7 @@ public:
 	int listen(Port port, int backlog = 32)
 	{
 		if (state != SS_READY)
-			return -2;
+			return -1;
 		
 		sockaddr_in server;
 		memset(&server, 0, sizeof(server));		// Clear struct
@@ -237,7 +252,7 @@ public:
 		int res = bind(sd, (const sockaddr*) &server, sizeof(server));
 		
 		if (res != 0)
-			return -3;
+			return -1;
 		
 		res = ::listen(sd, backlog);
 
@@ -252,13 +267,13 @@ public:
 	int accept(TcpClient& client)
 	{
 		if (state != SS_LISTENING || client.state != SS_READY)
-			return -2;
+			return -1;
 
 		unsigned int addrSize = sizeof(client.address);
 		client.sd = ::accept(sd, (sockaddr*) &client.address, &addrSize);
 		
 		if (client.sd < 0)
-			return -3;
+			return -1;
 		
 		client.state = SS_CONNECTED;
 		return 0;
