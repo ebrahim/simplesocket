@@ -30,6 +30,9 @@
 #ifndef _SIMPLESOCKET_HPP_
 #define _SIMPLESOCKET_HPP_
 
+#define SIMPLESOCKET_VERSION_MAJOR 0
+#define SIMPLESOCKET_VERSION_MINOR 2
+
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -44,28 +47,28 @@ typedef unsigned short Port;
 enum SocketState
 {
 	SS_ERROR = -1,   // socket is not open
-	SS_READY,        // socket is open and ready to establish a connection (client) or listen (server)
+	SS_READY,        // socket is open and ready to establish a connection (TCP client) or listen (TCP server) or send and receive datagrams (UDP socket)
 	SS_CONNECTED,    // a connection is established
 	SS_LISTENING,    // server is listening
 };
 
 /*********************\
-*      TcpSocket      *
+*       Socket        *
 \*********************/
 
-class TcpSocket
+class Socket
 {
 public:
-	TcpSocket()
+	Socket(int type, int protocol = 0)
 	{
 		memset(&address, 0, sizeof(address));		// Clear structure
-		sd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+		sd = socket(PF_INET, type, protocol);
 		if (sd < 0)
 			state = SS_ERROR;
 		else
 			state = SS_READY;
 	}
-	~TcpSocket()
+	~Socket()
 	{
 		close();
 	}
@@ -82,7 +85,7 @@ public:
 		}
 		return res;
 	}
-	char* getIP(char* ip)		// Allocation is up to user!
+	char* getIP(char* ip)		// Allocation is up to user
 	{
 		return strcpy(ip, inet_ntoa(address.sin_addr));
 	}
@@ -94,33 +97,46 @@ public:
 	{
 		return state;
 	}
+	int getSocketDescriptor()
+	{
+		return sd;
+	}
 	int setTimeOut(int sec, int usec = 0)
 	{
 		timeval t;
 		t.tv_sec = sec;
 		t.tv_usec = usec;
-		return setSendTimeOut(t) + setReceiveTimeOut(t);
+		return setsockopt(sd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t)) + setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
 	}
-	int setSendTimeOut(timeval t)
+	int setSendTimeOut(int sec, int usec = 0)
 	{
+		timeval t;
+		t.tv_sec = sec;
+		t.tv_usec = usec;
 		return setsockopt(sd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t));
 	}
-	int setReceiveTimeOut(timeval t)
+	int setReceiveTimeOut(int sec, int usec = 0)
 	{
+		timeval t;
+		t.tv_sec = sec;
+		t.tv_usec = usec;
 		return setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
 	}
 
-	static char* getIP(const char* hostname, char* ip)		// Allocation is up to user!
+	static char* getIP(const char* hostname, char* ip)		// Allocation is up to user
 	{
-		return strcpy(ip, inet_ntoa(getAddr(hostname)));
+		return strcpy(ip, inet_ntoa(getAddress(hostname)));
 	}
-	
-protected:
-	int sd;
-	sockaddr_in address;
-	SocketState state;
-	
-	static in_addr getAddr(const char* hostname)
+	static sockaddr_in getAddress(const char* hostname, Port port)
+	{
+		sockaddr_in res;
+		memset(&res, 0, sizeof(res));		// Clear struct
+		res.sin_family = PF_INET;
+		res.sin_port = htons(port);
+		res.sin_addr = getAddress(hostname);
+		return res;
+	}
+	static in_addr getAddress(const char* hostname)
 	{
 		in_addr hostAddr = {0};
 
@@ -135,6 +151,24 @@ protected:
 		hostAddr.s_addr = *( (unsigned long*) host->h_addr_list[0] );
 		
 		return hostAddr;
+	}
+	
+protected:
+	int sd;
+	sockaddr_in address;
+	SocketState state;
+};
+
+/*********************\
+*      TcpSocket      *
+\*********************/
+
+class TcpSocket : public Socket
+{
+public:
+	TcpSocket()
+	: Socket(SOCK_STREAM)
+	{
 	}
 };
 
@@ -155,8 +189,15 @@ public:
 		memset(&dest, 0, sizeof(dest));		// Clear struct
 		dest.sin_family = PF_INET;
 		dest.sin_port = htons(port);
-		dest.sin_addr = getAddr(host);
+		dest.sin_addr = getAddress(host);
 
+		return connect(dest);
+	}
+	int connect(const sockaddr_in& dest)
+	{
+		if (state != SS_READY)
+			return -1;
+		
 		int res = ::connect(sd, (const sockaddr*) &dest, sizeof(dest));
 		if (res == 0)
 		{
@@ -164,14 +205,6 @@ public:
 			address = dest;
 		}
 		return res;
-	}
-	int disconnect()
-	{
-		return TcpSocket::close();
-	}
-	int send(const char* data)
-	{
-		return send(data, strlen(data));
 	}
 	int send(const void* data, unsigned int size, int flags = MSG_NOSIGNAL)
 	{
@@ -184,33 +217,22 @@ public:
 			int wrote = ::send(sd, data, size, flags);
 			if (wrote < 0)
 			{
-				res = -1;
+				if (!res)
+					res = -1;
 				break;
 			}
 			data = (const char*) data + wrote;
 			size -= wrote;
+			res += wrote;
 		}
 		return res;
-	}
-	
-	char* receive(unsigned int size)		// delete is up to user!
-	{
-		char* buf = new char[size+1];
-		if (receive(buf, size) < 0)
-		{
-			delete [] buf;
-			return NULL;
-		}
-		return buf;
 	}
 	int receive(void* buf, unsigned int size, int flags = MSG_WAITALL)
 	{
 		if (state != SS_CONNECTED)
 			return -1;
 		
-		if (recv(sd, buf, size, flags) != size)
-			return -1;
-		return 0;
+		return recv(sd, buf, size, flags);
 	}
 	int readLine(string& line, unsigned int maxSize = (unsigned int) -1, char delimiter = '\n', char ignore = '\r')
 	{
@@ -291,9 +313,119 @@ public:
 		}
 		return client;
 	}
-	int stop()
+};
+
+/*********************\
+*      UdpSocket      *
+\*********************/
+
+class UdpSocket : public Socket
+{
+public:
+	UdpSocket()
+	: Socket(SOCK_DGRAM)
 	{
-		return TcpSocket::close();
+	}
+
+	int bind(Port port)
+	{
+		if (state != SS_READY)
+			return -1;
+		
+		sockaddr_in server;
+		memset(&server, 0, sizeof(server));		// Clear struct
+		server.sin_family = AF_INET;
+		server.sin_addr.s_addr = htonl(INADDR_ANY);   // Incoming address
+		server.sin_port = htons(port);       // Server port
+
+		int res = ::bind(sd, (const sockaddr*) &server, sizeof(server));
+		
+		if (res != 0)
+			state = SS_ERROR;
+		
+		return res;	
+	}
+	int connect(const char* host, Port port)		// Set default target for target-less send and receive
+	{
+		if (state != SS_READY)
+			return -1;
+		
+		sockaddr_in dest;
+		memset(&dest, 0, sizeof(dest));		// Clear struct
+		dest.sin_family = PF_INET;
+		dest.sin_port = htons(port);
+		dest.sin_addr = getAddress(host);
+
+		return connect(dest);
+	}
+	int connect(const sockaddr_in& dest)		// Set default target for target-less send and receive
+	{
+		if (state != SS_READY)
+			return -1;
+		
+		int res = ::connect(sd, (const sockaddr*) &dest, sizeof(dest));
+		if (res == 0)
+			address = dest;
+		else
+			state = SS_ERROR;
+		return res;
+	}
+	int receive(void* buf, unsigned int size, int flags = MSG_WAITALL)
+	{
+		if (state != SS_READY)
+			return -1;
+		
+		return recv(sd, buf, size, flags);
+	}
+	int receive(void* buf, unsigned int size, sockaddr_in& address, int flags = MSG_WAITALL)
+	{
+		if (state != SS_READY)
+			return -1;
+		socklen_t len = sizeof(address);
+		int res = recvfrom(sd, buf, size, flags, (sockaddr*)&address, &len);
+		return res;
+	}
+	int send(const void* data, unsigned int size, int flags = MSG_NOSIGNAL)
+	{
+		if (state != SS_READY)
+			return -1;
+		
+		int res = 0;
+		while (size > 0)
+		{
+			int wrote = ::send(sd, data, size, flags);
+			if (wrote < 0)
+			{
+				if (!res)
+					res = -1;
+				break;
+			}
+			data = (const char*) data + wrote;
+			size -= wrote;
+			res += wrote;
+		}
+		return res;
+	}
+	int send(const void* data, unsigned int size, const sockaddr_in& address, int flags = MSG_NOSIGNAL)
+	{
+		if (state != SS_READY)
+			return -1;
+		
+		int res = 0;
+		while (size > 0)
+		{
+			int wrote = ::sendto(sd, data, size, flags, (sockaddr*) &address, sizeof(address));
+			if (wrote < 0)
+			{
+				if (!res)
+					res = -1;
+				break;
+			}
+			data = (const char*) data + wrote;
+			size -= wrote;
+			res += wrote;
+		}
+		return res;
 	}
 };
 
