@@ -31,7 +31,7 @@
 #define _SIMPLESOCKET_HPP_
 
 #define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 2
+#define SIMPLESOCKET_VERSION_MINOR 3
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -40,9 +40,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <string>
+#include <stdint.h>
 using std::string;
-
-typedef unsigned short Port;
 
 enum SocketState
 {
@@ -66,7 +65,13 @@ public:
 		if (sd < 0)
 			state = SS_ERROR;
 		else
+		{
+			// Enable address reuse
+			int on = 1;
+			setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
 			state = SS_READY;
+		}
 	}
 	~Socket()
 	{
@@ -85,11 +90,29 @@ public:
 		}
 		return res;
 	}
-	char* getIP(char* ip)		// Allocation is up to user
+	uint32_t getIP()
+	{
+		return address.sin_addr.s_addr;
+	}
+	char* getIPString(char* ip)		// Allocation is up to user
 	{
 		return strcpy(ip, inet_ntoa(address.sin_addr));
 	}
-	Port getPort()
+	uint32_t getLocalIP()
+	{
+		sockaddr_in adr;
+		socklen_t len = sizeof(adr);
+		if (getsockname(sd, (sockaddr*) &adr, &len) < 0)
+			return 0;
+		return adr.sin_addr.s_addr;
+	}
+	char* getLocalIPString(char* ip)		// Allocation is up to user
+	{
+		in_addr adr;
+		adr.s_addr = getLocalIP();
+		return strcpy(ip, inet_ntoa(adr));
+	}
+	uint16_t getPort()
 	{
 		return ntohs(address.sin_port);
 	}
@@ -123,34 +146,36 @@ public:
 		return setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
 	}
 
-	static char* getIP(const char* hostname, char* ip)		// Allocation is up to user
+	static uint32_t getIP(const char* hostname)
 	{
-		return strcpy(ip, inet_ntoa(getAddress(hostname)));
+		if (hostname == NULL)
+			return 0;
+
+		hostent* host = gethostbyname(hostname);
+
+		if (host == NULL)		// gethostbyname failed on hostname
+			return 0;
+		
+		return *( (uint32_t*) host->h_addr_list[0] );
 	}
-	static sockaddr_in getAddress(const char* hostname, Port port)
+	static char* getIPString(const char* hostname, char* ip)		// Allocation is up to user
+	{
+		in_addr adr;
+		adr.s_addr = getIP(hostname);
+		return strcpy(ip, inet_ntoa(adr));
+	}
+	static sockaddr_in getAddress(const char* hostname, uint16_t port)
+	{
+		return getAddress(getIP(hostname), port);
+	}
+	static sockaddr_in getAddress(uint32_t ip, uint16_t port)
 	{
 		sockaddr_in res;
 		memset(&res, 0, sizeof(res));		// Clear struct
 		res.sin_family = PF_INET;
 		res.sin_port = htons(port);
-		res.sin_addr = getAddress(hostname);
+		res.sin_addr.s_addr = ip;
 		return res;
-	}
-	static in_addr getAddress(const char* hostname)
-	{
-		in_addr hostAddr = {0};
-
-		if (hostname == NULL)
-			return hostAddr;
-
-		hostent* host = gethostbyname(hostname);
-
-		if (host == NULL)		// gethostbyname failed on hostname
-			return hostAddr;
-		
-		hostAddr.s_addr = *( (unsigned long*) host->h_addr_list[0] );
-		
-		return hostAddr;
 	}
 	
 protected:
@@ -180,18 +205,17 @@ class TcpClient : public TcpSocket
 {
 	friend class TcpServer;
 public:
-	int connect(const char* host, Port port)
+	int connect(const char* host, uint16_t port)
 	{
 		if (state != SS_READY)
 			return -1;
-		
-		sockaddr_in dest;
-		memset(&dest, 0, sizeof(dest));		// Clear struct
-		dest.sin_family = PF_INET;
-		dest.sin_port = htons(port);
-		dest.sin_addr = getAddress(host);
-
-		return connect(dest);
+		return connect(getAddress(host, port));
+	}
+	int connect(uint32_t ip, uint16_t port)
+	{
+		if (state != SS_READY)
+			return -1;
+		return connect(getAddress(ip, port));
 	}
 	int connect(const sockaddr_in& dest)
 	{
@@ -205,6 +229,10 @@ public:
 			address = dest;
 		}
 		return res;
+	}
+	int send(const char* str)
+	{
+		return send(str, strlen(str));
 	}
 	int send(const void* data, unsigned int size, int flags = MSG_NOSIGNAL)
 	{
@@ -260,17 +288,12 @@ public:
 class TcpServer : public TcpSocket
 {
 public:
-	int listen(Port port, int backlog = 32)
+	int listen(uint16_t port, int backlog = 32)
 	{
 		if (state != SS_READY)
 			return -1;
 		
-		sockaddr_in server;
-		memset(&server, 0, sizeof(server));		// Clear struct
-		server.sin_family = AF_INET;
-		server.sin_addr.s_addr = htonl(INADDR_ANY);   // Incoming address
-		server.sin_port = htons(port);       // Server port
-
+		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
 		int res = bind(sd, (const sockaddr*) &server, sizeof(server));
 		
 		if (res != 0)
@@ -327,16 +350,12 @@ public:
 	{
 	}
 
-	int bind(Port port)
+	int bind(uint16_t port)
 	{
 		if (state != SS_READY)
 			return -1;
 		
-		sockaddr_in server;
-		memset(&server, 0, sizeof(server));		// Clear struct
-		server.sin_family = AF_INET;
-		server.sin_addr.s_addr = htonl(INADDR_ANY);   // Incoming address
-		server.sin_port = htons(port);       // Server port
+		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
 
 		int res = ::bind(sd, (const sockaddr*) &server, sizeof(server));
 		
@@ -345,18 +364,18 @@ public:
 		
 		return res;	
 	}
-	int connect(const char* host, Port port)		// Set default target for target-less send and receive
+	int connect(const char* host, uint16_t port)		// Set default target for target-less send and receive
 	{
 		if (state != SS_READY)
 			return -1;
 		
-		sockaddr_in dest;
-		memset(&dest, 0, sizeof(dest));		// Clear struct
-		dest.sin_family = PF_INET;
-		dest.sin_port = htons(port);
-		dest.sin_addr = getAddress(host);
-
-		return connect(dest);
+		return connect(getAddress(host, port));
+	}
+	int connect(uint32_t ip, uint16_t port)
+	{
+		if (state != SS_READY)
+			return -1;
+		return connect(getAddress(ip, port));
 	}
 	int connect(const sockaddr_in& dest)		// Set default target for target-less send and receive
 	{
