@@ -2,7 +2,7 @@
 *******************************************************************************
 *                            In the name of God
 *******************************************************************************
-* SimpleSocket 0.1
+* SimpleSocket 0.3
 *
 * A C++ library for socket programming intended to be:
 *    * simple to use

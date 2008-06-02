@@ -1,4 +1,4 @@
-APP=udp-server
+APP=simple-ftpd
 CPPFLAGS=-I../..
 CXXFLAGS=-g -Wall
 LINK=g++

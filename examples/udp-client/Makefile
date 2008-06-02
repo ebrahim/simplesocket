@@ -1,10 +1,11 @@
 APP=udp-client
 CPPFLAGS=-I../..
+CXXFLAGS=-g -Wall
+LINK=g++
 
 all: $(APP)
 
 $(APP): $(APP).cpp
-	$(LINK.cpp) $< -o $@
 
 clean:
 	rm -f *.o $(APP)
