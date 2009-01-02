@@ -1,37 +1,35 @@
-#if 0
+/*****************************************************************************\
+*                            In the name of God                               *
 *******************************************************************************
-*                            In the name of God
+* SimpleSocket 0.4                                                            *
+*                                                                             *
+* A C++ library for socket programming intended to be:                        *
+*    * simple to use                                                          *
+*    * powerful                                                               *
+*    * with negligible overhead                                               *
+*                                                                             *
 *******************************************************************************
-* SimpleSocket 0.3
-*
-* A C++ library for socket programming intended to be:
-*    * simple to use
-*    * powerful
-*    * with negligible overhead
-*
-*******************************************************************************
-* This program is free software; you can redistribute it and/or modify it
-* under the terms of the GNU General Public License version 3 as published by
-* the Free Software Foundation.
-* 
-* This program is distributed in the hope that it will be useful, but WITHOUT
-* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-* FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-* more details.
-* 
-* You can get a copy of the GNU General Public License from
-* http://www.gnu.org/copyleft/gpl.html
+* This program is free software; you can redistribute it and/or modify it     *
+* under the terms of the GNU General Public License version 3 as published by *
+* the Free Software Foundation.                                               *
+*                                                                             *
+* This program is distributed in the hope that it will be useful, but WITHOUT *
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or       *
+* FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for   *
+* more details.                                                               *
+*                                                                             *
+* You can get a copy of the GNU General Public License from                   *
+* http://www.gnu.org/copyleft/gpl.html                                        *
 ******************************************************************************* 
-* Copyright (C) 2008, Mohammad Ebrahim Mohammadi Panah
-* E-mail: mebrahim  at  gmail dot com
-*******************************************************************************
-#endif
+* Copyright (C) 2008, 2009, Mohammad Ebrahim Mohammadi Panah                  *
+* E-mail: ebrahim at mohammadi dot ir                                         *
+\*****************************************************************************/
 
 #ifndef _SIMPLESOCKET_HPP_
 #define _SIMPLESOCKET_HPP_
 
 #define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 3
+#define SIMPLESOCKET_VERSION_MINOR 4
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -69,7 +67,6 @@ public:
 			// Enable address reuse
 			int on = 1;
 			setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-
 			state = SS_READY;
 		}
 	}
@@ -77,7 +74,6 @@ public:
 	{
 		close();
 	}
-	
 	int close()
 	{
 		if (state == SS_ERROR)
@@ -88,6 +84,8 @@ public:
 			memset(&address, 0, sizeof(address));		// Clear structure
 			state = SS_READY;
 		}
+		else
+			state = SS_ERROR;
 		return res;
 	}
 	uint32_t getIP()
@@ -129,7 +127,8 @@ public:
 		timeval t;
 		t.tv_sec = sec;
 		t.tv_usec = usec;
-		return setsockopt(sd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t)) + setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
+		return setsockopt(sd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t))
+		     + setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
 	}
 	int setSendTimeOut(int sec, int usec = 0)
 	{
@@ -150,12 +149,9 @@ public:
 	{
 		if (hostname == NULL)
 			return 0;
-
 		hostent* host = gethostbyname(hostname);
-
 		if (host == NULL)		// gethostbyname failed on hostname
 			return 0;
-		
 		return *( (uint32_t*) host->h_addr_list[0] );
 	}
 	static char* getIPString(const char* hostname, char* ip)		// Allocation is up to user
@@ -221,13 +217,14 @@ public:
 	{
 		if (state != SS_READY)
 			return -1;
-		
 		int res = ::connect(sd, (const sockaddr*) &dest, sizeof(dest));
 		if (res == 0)
 		{
 			state = SS_CONNECTED;
 			address = dest;
 		}
+		else
+			state = SS_ERROR;
 		return res;
 	}
 	int send(const char* str)
@@ -238,15 +235,15 @@ public:
 	{
 		if (state != SS_CONNECTED)
 			return -1;
-		
 		int res = 0;
 		while (size > 0)
 		{
 			int wrote = ::send(sd, data, size, flags);
 			if (wrote < 0)
 			{
-				if (!res)
+				if (res == 0)
 					res = -1;
+				state = SS_ERROR;
 				break;
 			}
 			data = (const char*) data + wrote;
@@ -259,8 +256,10 @@ public:
 	{
 		if (state != SS_CONNECTED)
 			return -1;
-		
-		return recv(sd, buf, size, flags);
+		int res = recv(sd, buf, size, flags);
+		if (res < 0)
+			state = SS_ERROR;
+		return res;
 	}
 	int readLine(string& line, unsigned int maxSize = (unsigned int) -1, char delimiter = '\n', char ignore = '\r')
 	{
@@ -269,7 +268,10 @@ public:
 			char c;
 			int readSize = read(sd, &c, 1);
 			if (readSize < 0)
+			{
+				state = SS_ERROR;
 				return -2;
+			}
 			if (readSize == 0)
 				break;
 			if (c == delimiter)
@@ -292,34 +294,29 @@ public:
 	{
 		if (state != SS_READY)
 			return -1;
-		
 		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
 		int res = bind(sd, (const sockaddr*) &server, sizeof(server));
-		
 		if (res != 0)
+		{
+			state = SS_ERROR;
 			return -1;
-		
+		}
 		res = ::listen(sd, backlog);
-
 		if (res == 0)
 		{
 			state = SS_LISTENING;
 			address = server;
 		}
-		
 		return res;	
 	}
 	int accept(TcpClient& client)
 	{
 		if (state != SS_LISTENING || client.state != SS_READY)
 			return -1;
-
 		unsigned int addrSize = sizeof(client.address);
 		client.sd = ::accept(sd, (sockaddr*) &client.address, &addrSize);
-		
 		if (client.sd < 0)
 			return -1;
-		
 		client.state = SS_CONNECTED;
 		return 0;
 	}
@@ -327,7 +324,6 @@ public:
 	{
 		if (state != SS_LISTENING)
 			return NULL;
-		
 		TcpClient* client = new TcpClient;
 		if (accept(*client))
 		{
@@ -349,39 +345,38 @@ public:
 	: Socket(SOCK_DGRAM)
 	{
 	}
-
 	int bind(uint16_t port)
 	{
 		if (state != SS_READY)
 			return -1;
-		
 		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
-
 		int res = ::bind(sd, (const sockaddr*) &server, sizeof(server));
-		
 		if (res != 0)
 			state = SS_ERROR;
-		
 		return res;	
 	}
 	int connect(const char* host, uint16_t port)		// Set default target for target-less send and receive
 	{
 		if (state != SS_READY)
 			return -1;
-		
-		return connect(getAddress(host, port));
+		int res = connect(getAddress(host, port));
+		if (res != 0)
+			state = SS_ERROR;
+		return res;
 	}
 	int connect(uint32_t ip, uint16_t port)
 	{
 		if (state != SS_READY)
 			return -1;
-		return connect(getAddress(ip, port));
+		int res = connect(getAddress(ip, port));
+		if (res != 0)
+			state = SS_ERROR;
+		return res;
 	}
 	int connect(const sockaddr_in& dest)		// Set default target for target-less send and receive
 	{
 		if (state != SS_READY)
 			return -1;
-		
 		int res = ::connect(sd, (const sockaddr*) &dest, sizeof(dest));
 		if (res == 0)
 			address = dest;
@@ -393,8 +388,10 @@ public:
 	{
 		if (state != SS_READY)
 			return -1;
-		
-		return recv(sd, buf, size, flags);
+		int res = recv(sd, buf, size, flags);
+		if (res < 0)
+			state = SS_ERROR;
+		return res;
 	}
 	int receive(void* buf, unsigned int size, sockaddr_in& address, int flags = MSG_WAITALL)
 	{
@@ -402,21 +399,23 @@ public:
 			return -1;
 		socklen_t len = sizeof(address);
 		int res = recvfrom(sd, buf, size, flags, (sockaddr*)&address, &len);
+		if (res < 0)
+			state = SS_ERROR;
 		return res;
 	}
 	int send(const void* data, unsigned int size, int flags = MSG_NOSIGNAL)
 	{
 		if (state != SS_READY)
 			return -1;
-		
 		int res = 0;
 		while (size > 0)
 		{
 			int wrote = ::send(sd, data, size, flags);
 			if (wrote < 0)
 			{
-				if (!res)
+				if (res == 0)
 					res = -1;
+				state = SS_ERROR;
 				break;
 			}
 			data = (const char*) data + wrote;
@@ -429,7 +428,6 @@ public:
 	{
 		if (state != SS_READY)
 			return -1;
-		
 		int res = 0;
 		while (size > 0)
 		{
@@ -438,6 +436,7 @@ public:
 			{
 				if (!res)
 					res = -1;
+				state = SS_ERROR;
 				break;
 			}
 			data = (const char*) data + wrote;
