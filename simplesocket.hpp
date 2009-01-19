@@ -1,7 +1,7 @@
 /*****************************************************************************\
 *                            In the name of God                               *
 *******************************************************************************
-* SimpleSocket 0.4                                                            *
+* SimpleSocket 0.5                                                            *
 *                                                                             *
 * A C++ library for socket programming intended to be:                        *
 *    * simple to use                                                          *
@@ -29,7 +29,7 @@
 #define _SIMPLESOCKET_HPP_
 
 #define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 4
+#define SIMPLESOCKET_VERSION_MINOR 5
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -223,8 +223,6 @@ public:
 			state = SS_CONNECTED;
 			address = dest;
 		}
-		else
-			state = SS_ERROR;
 		return res;
 	}
 	int send(const char* str)
@@ -295,12 +293,8 @@ public:
 		if (state != SS_READY)
 			return -1;
 		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
-		int res = bind(sd, (const sockaddr*) &server, sizeof(server));
-		if (res != 0)
-		{
-			state = SS_ERROR;
+		if (bind(sd, (const sockaddr*) &server, sizeof(server)) != 0)
 			return -1;
-		}
 		res = ::listen(sd, backlog);
 		if (res == 0)
 		{
@@ -350,28 +344,19 @@ public:
 		if (state != SS_READY)
 			return -1;
 		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
-		int res = ::bind(sd, (const sockaddr*) &server, sizeof(server));
-		if (res != 0)
-			state = SS_ERROR;
-		return res;	
+		return ::bind(sd, (const sockaddr*) &server, sizeof(server));
 	}
 	int connect(const char* host, uint16_t port)		// Set default target for target-less send and receive
 	{
 		if (state != SS_READY)
 			return -1;
-		int res = connect(getAddress(host, port));
-		if (res != 0)
-			state = SS_ERROR;
-		return res;
+		return connect(getAddress(host, port));
 	}
 	int connect(uint32_t ip, uint16_t port)
 	{
 		if (state != SS_READY)
 			return -1;
-		int res = connect(getAddress(ip, port));
-		if (res != 0)
-			state = SS_ERROR;
-		return res;
+		return connect(getAddress(ip, port));
 	}
 	int connect(const sockaddr_in& dest)		// Set default target for target-less send and receive
 	{
@@ -380,8 +365,6 @@ public:
 		int res = ::connect(sd, (const sockaddr*) &dest, sizeof(dest));
 		if (res == 0)
 			address = dest;
-		else
-			state = SS_ERROR;
 		return res;
 	}
 	int receive(void* buf, unsigned int size, int flags = MSG_WAITALL)
