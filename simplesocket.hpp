@@ -295,7 +295,7 @@ public:
 		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
 		if (bind(sd, (const sockaddr*) &server, sizeof(server)) != 0)
 			return -1;
-		res = ::listen(sd, backlog);
+		int res = ::listen(sd, backlog);
 		if (res == 0)
 		{
 			state = SS_LISTENING;
