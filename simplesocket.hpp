@@ -29,7 +29,7 @@
 #define _SIMPLESOCKET_HPP_
 
 #define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 5
+#define SIMPLESOCKET_VERSION_MINOR 6
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -254,9 +254,21 @@ public:
 	{
 		if (state != SS_CONNECTED)
 			return -1;
-		int res = recv(sd, buf, size, flags);
-		if (res < 0)
-			state = SS_ERROR;
+		int res = 0;
+		while (size > 0)
+		{
+			int read_size = recv(sd, buf, size, flags);
+			if (read_size < 0)
+			{
+				if (res == 0)
+					res = -1;
+				state = SS_ERROR;
+				break;
+			}
+			buf = (char*) buf + read_size;
+			size -= read_size;
+			res += read_size;
+		}
 		return res;
 	}
 	int readLine(string& line, unsigned int maxSize = (unsigned int) -1, char delimiter = '\n', char ignore = '\r')
