@@ -23,11 +23,14 @@
 #define _FTP_SERVER_H_
 
 #include "simplesocket.hpp"
-#include <fcntl.h>		// For O_RDONLY, etc.
-#include <unistd.h>		// For getcwd, chdir
+
+#include <cstdlib>
 #include <cassert>
 #include <string>
 using std::string;
+
+#include <fcntl.h>		// For O_RDONLY, etc.
+#include <unistd.h>		// For getcwd, chdir
 
 #define MAX_COMMAND_LEN 4096
 #define FILE_BUF_LEN 32768
