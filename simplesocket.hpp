@@ -237,7 +237,7 @@ public:
 		while (size > 0)
 		{
 			int wrote = ::send(sd, data, size, flags);
-			if (wrote < 0)
+			if (wrote <= 0)
 			{
 				if (res == 0)
 					res = -1;
@@ -258,7 +258,7 @@ public:
 		while (size > 0)
 		{
 			int read_size = recv(sd, buf, size, flags);
-			if (read_size < 0)
+			if (read_size <= 0)
 			{
 				if (res == 0)
 					res = -1;
@@ -277,7 +277,7 @@ public:
 		{
 			char c;
 			int readSize = read(sd, &c, 1);
-			if (readSize < 0)
+			if (readSize <= 0)
 			{
 				state = SS_ERROR;
 				return -2;
