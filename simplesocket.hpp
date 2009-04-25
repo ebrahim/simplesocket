@@ -29,7 +29,7 @@
 #define _SIMPLESOCKET_HPP_
 
 #define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 6
+#define SIMPLESOCKET_VERSION_MINOR 7
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
