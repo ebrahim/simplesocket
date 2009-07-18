@@ -1,7 +1,7 @@
 /*****************************************************************************\
 *                            In the name of God                               *
 *******************************************************************************
-* SimpleSocket 0.8                                                            *
+* SimpleSocket 0.9                                                            *
 *                                                                             *
 * A C++ library for socket programming intended to be:                        *
 *    * simple to use                                                          *
@@ -29,7 +29,7 @@
 #define _SIMPLESOCKET_HPP_
 
 #define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 8
+#define SIMPLESOCKET_VERSION_MINOR 9
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -70,12 +70,20 @@ public:
 			state = SS_READY;
 		}
 	}
+	Socket(bool)
+	: sd(-1)
+	, state(SS_ERROR)
+	{
+		memset(&address, 0, sizeof(address));		// Clear structure
+	}
 	~Socket()
 	{
 		close();
 	}
 	int close()
 	{
+		if (sd < 0)
+			return -1;
 		int res = ::close(sd);
 		if (res == 0)
 		{
@@ -189,6 +197,10 @@ public:
 	: Socket(SOCK_STREAM)
 	{
 	}
+	TcpSocket(bool)
+	: Socket(true)
+	{
+	}
 };
 
 /*********************\
@@ -199,6 +211,13 @@ class TcpClient : public TcpSocket
 {
 	friend class TcpServer;
 public:
+	TcpClient()
+	{
+	}
+	TcpClient(bool)
+	: TcpSocket(true)
+	{
+	}
 	int connect(const char* host, uint16_t port)
 	{
 		if (state != SS_READY)
@@ -298,6 +317,13 @@ public:
 class TcpServer : public TcpSocket
 {
 public:
+	TcpServer()
+	{
+	}
+	TcpServer(bool)
+	: TcpSocket(true)
+	{
+	}
 	int listen(uint16_t port, int backlog = 32)
 	{
 		if (state != SS_READY)
@@ -315,8 +341,9 @@ public:
 	}
 	int accept(TcpClient& client)
 	{
-		if (state != SS_LISTENING || client.state != SS_READY)
+		if (state != SS_LISTENING)
 			return -1;
+		client.close();
 		unsigned int addrSize = sizeof(client.address);
 		client.sd = ::accept(sd, (sockaddr*) &client.address, &addrSize);
 		if (client.sd < 0)
@@ -328,7 +355,7 @@ public:
 	{
 		if (state != SS_LISTENING)
 			return NULL;
-		TcpClient* client = new TcpClient;
+		TcpClient* client = new TcpClient(true);
 		if (accept(*client))
 		{
 			delete client;
@@ -347,6 +374,10 @@ class UdpSocket : public Socket
 public:
 	UdpSocket()
 	: Socket(SOCK_DGRAM)
+	{
+	}
+	UdpSocket(bool)
+	: Socket(true)
 	{
 	}
 	int bind(uint16_t port)
