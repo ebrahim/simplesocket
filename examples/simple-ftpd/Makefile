@@ -1,6 +1,6 @@
 APP=simple-ftpd
 CPPFLAGS=-I../..
-CXXFLAGS=-g -Wall
+CXXFLAGS=-g -Wall -Wextra
 LINK=g++
 
 all: $(APP)

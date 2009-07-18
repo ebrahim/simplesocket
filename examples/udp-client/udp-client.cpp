@@ -29,7 +29,7 @@ using namespace std;
 #define BUF_LEN 1024
 
 int
-main(int argc, char* argv[])
+main(/*int argc, char* argv[]*/)
 {
 	UdpSocket socket;
 

@@ -29,7 +29,7 @@ using namespace std;
 #define ACK_MSG "Got your message!"
 
 int
-main(int argc, char* argv[])
+main(/*int argc, char* argv[]*/)
 {
 	UdpSocket socket;
 	if (socket.bind(PORT))
