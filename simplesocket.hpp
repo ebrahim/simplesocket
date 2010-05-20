@@ -28,8 +28,8 @@
 #ifndef _SIMPLESOCKET_HPP_
 #define _SIMPLESOCKET_HPP_
 
-#define SIMPLESOCKET_VERSION_MAJOR 0
-#define SIMPLESOCKET_VERSION_MINOR 9
+#define SIMPLESOCKET_VERSION_MAJOR 1
+#define SIMPLESOCKET_VERSION_MINOR 0
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -149,6 +149,16 @@ public:
 		t.tv_sec = sec;
 		t.tv_usec = usec;
 		return setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
+	}
+	int enableBroadcast()
+	{
+		int yes = 1;
+		return setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
+	}
+	int disableBroadcast()
+	{
+		int yes = 0;
+		return setsockopt(sd, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
 	}
 
 	static uint32_t getIP(const char* hostname)
@@ -324,11 +334,15 @@ public:
 	: TcpSocket(true)
 	{
 	}
-	int listen(uint16_t port, int backlog = 32)
+	int listen(uint16_t port, const char* host = NULL, int backlog = 32)
 	{
 		if (state != SS_READY)
 			return -1;
-		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
+		sockaddr_in server;
+		if (host)
+			server = getAddress(host, port);
+		else
+			server = getAddress(htonl(INADDR_ANY), port);
 		if (bind(sd, (const sockaddr*) &server, sizeof(server)) != 0)
 			return -1;
 		int res = ::listen(sd, backlog);
@@ -380,11 +394,15 @@ public:
 	: Socket(true)
 	{
 	}
-	int bind(uint16_t port)
+	int bind(uint16_t port, const char* host = NULL)
 	{
 		if (state != SS_READY)
 			return -1;
-		sockaddr_in server = getAddress(htonl(INADDR_ANY), port);
+		sockaddr_in server;
+		if (host)
+			server = getAddress(host, port);
+		else
+			server = getAddress(htonl(INADDR_ANY), port);
 		return ::bind(sd, (const sockaddr*) &server, sizeof(server));
 	}
 	int connect(const char* host, uint16_t port)		// Set default target for target-less send and receive
