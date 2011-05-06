@@ -21,7 +21,7 @@
 * You can get a copy of the GNU General Public License from                   *
 * http://www.gnu.org/copyleft/gpl.html                                        *
 ******************************************************************************* 
-* Copyright (C) 2008, 2009, Mohammad Ebrahim Mohammadi Panah                  *
+* Copyright (C) 2008, 2009, Ebrahim Mohammadi                                 *
 * E-mail: ebrahim at mohammadi dot ir                                         *
 \*****************************************************************************/
 
